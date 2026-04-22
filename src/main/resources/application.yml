@@ -1,0 +1,137 @@
+spring:
+  application:
+    name: ai-support-agent-api
+
+  # ── Database ──────────────────────────────────────────────────────────────
+  datasource:
+    # Environment variable with localhost fallback for local dev.
+    # In Docker Compose the app container connects to the 'postgres' service by hostname.
+    url: jdbc:postgresql://${DB_HOST:localhost}:${DB_PORT:5433}/${DB_NAME:support_agent}
+    username: ${DB_USER:support_agent}
+    password: ${DB_PASSWORD:support_agent}
+    driver-class-name: org.postgresql.Driver
+
+  jpa:
+    hibernate:
+      # 'validate': Hibernate reads DB metadata at startup and throws an exception if the
+      # schema does not match the entity mappings. Flyway owns all schema changes — Hibernate
+      # must never create or alter tables automatically in a production-grade project.
+      # Never use 'create', 'create-drop', or 'update' outside of throwaway local experiments.
+      ddl-auto: validate
+    # open-in-view: false prevents Hibernate from holding a DB connection open for the
+    # entire duration of an HTTP request (the "OSIV anti-pattern"). With this off, all DB
+    # access must happen within an explicit @Transactional boundary in the service layer.
+    open-in-view: false
+    show-sql: false
+    properties:
+      hibernate:
+        format_sql: true
+        dialect: org.hibernate.dialect.PostgreSQLDialect
+
+  # ── Flyway ────────────────────────────────────────────────────────────────
+  flyway:
+    enabled: true
+    locations: classpath:db/migration
+    # baseline-on-migrate: true would let Flyway run on a DB that already has tables
+    # but no flyway_schema_history. Only enable if you're adopting Flyway mid-project.
+
+  # ── Virtual Threads (Java 21 Project Loom) ────────────────────────────────
+  threads:
+    virtual:
+      # Replaces the default Tomcat thread pool and Spring @Async executor with Java 21
+      # virtual threads. Virtual threads are not OS threads — they are lightweight coroutines
+      # managed by the JVM. This means thousands of concurrent blocking operations (DB queries,
+      # HTTP calls to Claude) can run without exhausting a fixed-size OS thread pool.
+      # This setting is a single line that enables Loom across the entire application.
+      enabled: true
+
+  # ── Spring AI ─────────────────────────────────────────────────────────────
+  ai:
+    anthropic:
+      # Falls back to a placeholder string if the env var is absent.
+      # The placeholder prevents app startup failure when running in mock mode
+      # (app.ai.mock-enabled: true) because MockRagService never calls this client.
+      api-key: ${ANTHROPIC_API_KEY:PLACEHOLDER_SET_IN_APPLICATION_LOCAL_YML}
+      chat:
+        options:
+          model: claude-haiku-4-5-20251001
+          max-tokens: 1024
+    openai:
+      api-key: ${OPENAI_API_KEY:PLACEHOLDER_SET_IN_APPLICATION_LOCAL_YML}
+      embedding:
+        options:
+          # text-embedding-3-small produces 1536-dimensional vectors.
+          # This dimension is locked — changing the model mid-project would invalidate
+          # all stored vectors in the knowledge_articles table.
+          model: text-embedding-3-small
+
+  # ── Spring Boot Admin Client ───────────────────────────────────────────────
+  # Enabled in Phase 5 when the admin server Docker service is configured.
+  # The client registers this app with the admin server on startup so it appears
+  # in the monitoring dashboard at http://localhost:8090.
+  boot:
+    admin:
+      client:
+        enabled: false  # Set to true in Phase 5
+        url: http://${ADMIN_HOST:localhost}:8090
+        instance:
+          name: ${spring.application.name}
+
+# ── Actuator endpoints ──────────────────────────────────────────────────────
+management:
+  endpoints:
+    web:
+      exposure:
+        # 'httpexchanges' replaced the deprecated 'httptrace' in Spring Boot 3.
+        # These endpoints are consumed by Spring Boot Admin for the dashboard view.
+        include: health,info,metrics,loggers,httpexchanges
+  endpoint:
+    health:
+      show-details: always
+  info:
+    env:
+      enabled: true  # Allows the 'info.*' properties below to appear in /actuator/info
+
+# ── App info (visible in /actuator/info and Spring Boot Admin dashboard) ────
+info:
+  app:
+    name: ${spring.application.name}
+    description: AI-powered support ticket API with RAG and Claude
+    # @project.version@ and @java.version@ are replaced by Maven resource filtering at build time
+    version: "@project.version@"
+    java-version: "@java.version@"
+
+# ── Server ──────────────────────────────────────────────────────────────────
+server:
+  port: 8080
+  error:
+    # Disable the default Spring Boot /error redirect so our GlobalExceptionHandler
+    # handles all errors and returns RFC 7807 ProblemDetail consistently.
+    whitelabel:
+      enabled: false
+
+# ── Swagger / OpenAPI ────────────────────────────────────────────────────────
+springdoc:
+  swagger-ui:
+    path: /swagger-ui.html
+    tags-sorter: alpha
+    operations-sorter: alpha
+  api-docs:
+    path: /api-docs
+
+# ── Custom application properties ───────────────────────────────────────────
+app:
+  ai:
+    # Controls which RagService implementation is active at runtime.
+    # true  → MockRagService bean is injected (no API keys needed)
+    # false → ClaudeRagService bean is injected (requires ANTHROPIC_API_KEY + OPENAI_API_KEY)
+    # Override this to 'false' in application-local.yml when real keys are available.
+    mock-enabled: true
+  rag:
+    # Number of knowledge base articles to retrieve per similarity search.
+    # Higher values give Claude more context but increase prompt size and cost.
+    top-k: 5
+    # Vector dimension must match text-embedding-3-small exactly.
+    # If you ever switch embedding models, you must re-embed all articles
+    # and update this value + the Flyway migration that defines the column.
+    embedding-dimension: 1536

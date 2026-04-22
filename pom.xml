@@ -1,0 +1,382 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0
+         https://maven.apache.org/xsd/maven-4.0.0.xsd">
+    <modelVersion>4.0.0</modelVersion>
+
+    <!--
+      spring-boot-starter-parent provides:
+        - Dependency version management (no need to specify versions for common libraries)
+        - Default Maven plugin configurations (compiler, surefire, etc.)
+        - Resource filtering for application.yml (enables @project.version@ substitution)
+    -->
+    <parent>
+        <groupId>org.springframework.boot</groupId>
+        <artifactId>spring-boot-starter-parent</artifactId>
+        <version>3.4.1</version>
+        <relativePath/>
+    </parent>
+
+    <groupId>com.askaragoz</groupId>
+    <artifactId>ai-support-agent-api</artifactId>
+    <version>0.0.1-SNAPSHOT</version>
+    <name>ai-support-agent-api</name>
+    <description>AI-powered support ticket API using Spring Boot 3, Spring AI, and pgvector RAG</description>
+
+    <!-- ── Version properties ─────────────────────────────────────────────── -->
+    <properties>
+        <java.version>21</java.version>
+        <spring-ai.version>1.0.0</spring-ai.version>
+        <spring-boot-admin.version>3.3.5</spring-boot-admin.version>
+        <mapstruct.version>1.6.3</mapstruct.version>
+        <lombok-mapstruct-binding.version>0.2.0</lombok-mapstruct-binding.version>
+        <springdoc.version>2.7.0</springdoc.version>
+        <pgvector.version>0.1.6</pgvector.version>
+        <jacoco.version>0.8.12</jacoco.version>
+    </properties>
+
+    <!--
+      dependencyManagement lets us import the Spring AI BOM (Bill of Materials).
+      A BOM is a special POM that declares the versions of a set of related libraries.
+      Importing it means we can declare Spring AI dependencies below without specifying
+      versions — the BOM guarantees they are all mutually compatible.
+    -->
+    <dependencyManagement>
+        <dependencies>
+            <dependency>
+                <groupId>org.springframework.ai</groupId>
+                <artifactId>spring-ai-bom</artifactId>
+                <version>${spring-ai.version}</version>
+                <type>pom</type>
+                <scope>import</scope>
+            </dependency>
+        </dependencies>
+    </dependencyManagement>
+
+    <dependencies>
+
+        <!-- ── Core Spring Boot ──────────────────────────────────────────── -->
+
+        <!--
+          spring-boot-starter-web: everything needed to build a REST API.
+          Includes: embedded Tomcat, Spring MVC (DispatcherServlet, @RestController),
+          Jackson (JSON serialisation), and @Valid support wiring.
+        -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-web</artifactId>
+        </dependency>
+
+        <!--
+          spring-boot-starter-data-jpa: persistence layer.
+          Includes: Hibernate ORM, Spring Data repositories, transaction management.
+          We define interfaces like SupportTicketRepository that extend JpaRepository,
+          and Spring Data generates the SQL at startup — no boilerplate needed.
+        -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-data-jpa</artifactId>
+        </dependency>
+
+        <!--
+          spring-boot-starter-validation: constraint annotations for DTOs.
+          Enables @Valid on controller method parameters, and annotations like
+          @NotBlank, @Email, @Size on DTO fields. Backed by Hibernate Validator.
+        -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-validation</artifactId>
+        </dependency>
+
+        <!--
+          spring-boot-starter-actuator: production-readiness endpoints.
+          Exposes /actuator/health, /actuator/metrics, /actuator/loggers, etc.
+          Spring Boot Admin uses these endpoints to show live app state in its dashboard.
+        -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-actuator</artifactId>
+        </dependency>
+
+        <!-- ── Database ──────────────────────────────────────────────────── -->
+
+        <!--
+          PostgreSQL JDBC driver: the low-level connector between Java and Postgres.
+          'runtime' scope means it is on the classpath when the app runs but is not
+          needed to compile our code — we code against the JDBC API, not the driver directly.
+        -->
+        <dependency>
+            <groupId>org.postgresql</groupId>
+            <artifactId>postgresql</artifactId>
+            <scope>runtime</scope>
+        </dependency>
+
+        <!--
+          flyway-core: versioned database migration tool.
+          On startup, Flyway checks which V*.sql scripts have already run (tracked in
+          flyway_schema_history table) and applies any new ones in version order.
+          This guarantees the schema is always in sync with the code.
+        -->
+        <dependency>
+            <groupId>org.flywaydb</groupId>
+            <artifactId>flyway-core</artifactId>
+        </dependency>
+
+        <!--
+          flyway-database-postgresql: required in Spring Boot 3.2+ for PostgreSQL dialect support.
+          In older versions this was bundled inside flyway-core; it is now a separate module.
+          Without it, Flyway will throw "No database found to handle jdbc:postgresql://..."
+        -->
+        <dependency>
+            <groupId>org.flywaydb</groupId>
+            <artifactId>flyway-database-postgresql</artifactId>
+        </dependency>
+
+        <!--
+          pgvector Java client: provides JDBC support for the PostgreSQL vector type.
+          Used when constructing native SQL queries with pgvector's <=> similarity operator.
+          Version is pinned because it is not managed by the Spring Boot BOM.
+        -->
+        <dependency>
+            <groupId>com.pgvector</groupId>
+            <artifactId>pgvector</artifactId>
+            <version>${pgvector.version}</version>
+        </dependency>
+
+        <!-- ── Spring AI ─────────────────────────────────────────────────── -->
+
+        <!--
+          spring-ai-anthropic-spring-boot-starter: auto-configures a ChatModel bean
+          that calls Anthropic's API. We use this for the Claude generation step in RagService.
+          Reads spring.ai.anthropic.api-key and model options from application.yml.
+        -->
+        <dependency>
+            <groupId>org.springframework.ai</groupId>
+            <artifactId>spring-ai-starter-model-anthropic</artifactId>
+            <version>${spring-ai.version}</version>
+        </dependency>
+
+        <!--
+          spring-ai-starter-model-openai: auto-configures an EmbeddingModel bean
+          that calls OpenAI's API. We use it ONLY for text-embedding-3-small embeddings.
+          Claude handles all chat/generation; OpenAI handles only the vector embedding step.
+          Note: artifact was renamed from spring-ai-openai-spring-boot-starter in Spring AI 1.0.0 GA.
+        -->
+        <dependency>
+            <groupId>org.springframework.ai</groupId>
+            <artifactId>spring-ai-starter-model-openai</artifactId>
+            <version>${spring-ai.version}</version>
+        </dependency>
+
+        <!-- ── Code Generation ───────────────────────────────────────────── -->
+
+        <!--
+          MapStruct: generates type-safe DTO↔Entity mapping code at compile time.
+          We declare an interface (e.g. TicketMapper) with abstract methods, and MapStruct
+          generates a concrete implementation class. Zero reflection at runtime — faster
+          than alternatives like ModelMapper, and errors caught at compile time not at runtime.
+          The annotation processor is configured in the build plugin section below.
+        -->
+        <dependency>
+            <groupId>org.mapstruct</groupId>
+            <artifactId>mapstruct</artifactId>
+            <version>${mapstruct.version}</version>
+        </dependency>
+
+        <!--
+          Lombok: eliminates Java boilerplate via annotations processed at compile time.
+          @Getter/@Setter: generates getter/setter methods
+          @Builder: generates a fluent builder pattern
+          @AllArgsConstructor / @NoArgsConstructor: generates constructors
+          @Slf4j: injects a 'log' field (SLF4J Logger) into the class
+          'optional': tells Maven not to pull Lombok transitively into downstream projects.
+        -->
+        <dependency>
+            <groupId>org.projectlombok</groupId>
+            <artifactId>lombok</artifactId>
+            <optional>true</optional>
+        </dependency>
+
+        <!-- ── API Documentation ─────────────────────────────────────────── -->
+
+        <!--
+          springdoc-openapi-starter-webmvc-ui: generates an OpenAPI 3 spec and serves
+          Swagger UI at /swagger-ui.html. It reads @Operation, @ApiResponse, and @Schema
+          annotations from our controllers and DTOs — no separate YAML needed.
+        -->
+        <dependency>
+            <groupId>org.springdoc</groupId>
+            <artifactId>springdoc-openapi-starter-webmvc-ui</artifactId>
+            <version>${springdoc.version}</version>
+        </dependency>
+
+        <!-- ── Monitoring ────────────────────────────────────────────────── -->
+
+        <!--
+          spring-boot-admin-starter-client: registers this app with the Spring Boot Admin
+          server (runs separately as a Docker service). On startup, the client sends the
+          app's name, actuator URL, and health URL to the admin server so it appears
+          in the dashboard. No code changes needed — pure configuration.
+        -->
+        <dependency>
+            <groupId>de.codecentric</groupId>
+            <artifactId>spring-boot-admin-starter-client</artifactId>
+            <version>${spring-boot-admin.version}</version>
+        </dependency>
+
+        <!-- ── Testing ───────────────────────────────────────────────────── -->
+
+        <!--
+          spring-boot-starter-test: the standard Spring Boot test bundle.
+          Includes: JUnit 5, Mockito, AssertJ, MockMvc, @SpringBootTest, @WebMvcTest.
+          This covers unit tests (with Mockito mocks) and full integration tests.
+        -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-test</artifactId>
+            <scope>test</scope>
+        </dependency>
+
+        <!--
+          spring-boot-testcontainers: Spring Boot 3.1+ integration for Testcontainers.
+          Provides @ServiceConnection — annotate a @Container field and Spring
+          automatically wires the container's JDBC URL into the datasource config.
+          Eliminates the boilerplate @DynamicPropertySource setup.
+        -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-testcontainers</artifactId>
+            <scope>test</scope>
+        </dependency>
+
+        <!--
+          testcontainers postgresql: manages the lifecycle of a real PostgreSQL Docker
+          container during tests. We use the pgvector/pgvector:pg16 image so tests
+          run against the same DB as production — including vector extension support.
+        -->
+        <dependency>
+            <groupId>org.testcontainers</groupId>
+            <artifactId>postgresql</artifactId>
+            <scope>test</scope>
+        </dependency>
+
+        <!--
+          testcontainers junit-jupiter: JUnit 5 extension that manages container lifecycle.
+          @Testcontainers on the test class + @Container on container fields means
+          containers start before the first test method and stop after the last one.
+        -->
+        <dependency>
+            <groupId>org.testcontainers</groupId>
+            <artifactId>junit-jupiter</artifactId>
+            <scope>test</scope>
+        </dependency>
+
+    </dependencies>
+
+    <build>
+        <plugins>
+
+            <!--
+              spring-boot-maven-plugin: packages the application as an executable "fat JAR"
+              containing the app code, all dependencies, and an embedded Tomcat server.
+              Run with: java -jar target/ai-support-agent-api-0.0.1-SNAPSHOT.jar
+            -->
+            <plugin>
+                <groupId>org.springframework.boot</groupId>
+                <artifactId>spring-boot-maven-plugin</artifactId>
+                <configuration>
+                    <!-- Lombok is compile-time only; exclude it from the runtime JAR -->
+                    <excludes>
+                        <exclude>
+                            <groupId>org.projectlombok</groupId>
+                            <artifactId>lombok</artifactId>
+                        </exclude>
+                    </excludes>
+                </configuration>
+            </plugin>
+
+            <!--
+              maven-compiler-plugin: controls how Java source files are compiled.
+              The annotationProcessorPaths section is the critical part — it tells the
+              compiler which annotation processors to run, and in which order.
+
+              WHY ORDER MATTERS (Lombok before MapStruct):
+              Both tools run during compilation and read the Java source files.
+              Lombok generates getters, setters, and builders by modifying the AST
+              (Abstract Syntax Tree) before the class is fully compiled.
+              MapStruct reads those generated methods when generating mapper code.
+              If MapStruct runs first, Lombok's generated methods don't exist yet,
+              and MapStruct produces a broken mapper that causes NullPointerException at runtime.
+            -->
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-compiler-plugin</artifactId>
+                <configuration>
+                    <annotationProcessorPaths>
+                        <!-- 1. Lombok runs first — generates getters, setters, builders -->
+                        <path>
+                            <groupId>org.projectlombok</groupId>
+                            <artifactId>lombok</artifactId>
+                            <version>${lombok.version}</version>
+                        </path>
+                        <!--
+                          2. lombok-mapstruct-binding: a bridge library that ensures
+                          Lombok and MapStruct cooperate correctly in the same compilation unit.
+                          Without it, incremental compilation can cause ordering issues.
+                        -->
+                        <path>
+                            <groupId>org.projectlombok</groupId>
+                            <artifactId>lombok-mapstruct-binding</artifactId>
+                            <version>${lombok-mapstruct-binding.version}</version>
+                        </path>
+                        <!-- 3. MapStruct runs last — reads Lombok-generated methods -->
+                        <path>
+                            <groupId>org.mapstruct</groupId>
+                            <artifactId>mapstruct-processor</artifactId>
+                            <version>${mapstruct.version}</version>
+                        </path>
+                    </annotationProcessorPaths>
+                    <compilerArgs>
+                        <!--
+                          Tells MapStruct to annotate all generated mapper implementation
+                          classes with @Component. This makes them Spring-managed beans,
+                          injectable via @Autowired or constructor injection in services.
+                          Without this flag, you'd have to use Mappers.getMapper(XMapper.class)
+                          which bypasses Spring's DI container.
+                        -->
+                        <arg>-Amapstruct.defaultComponentModel=spring</arg>
+                    </compilerArgs>
+                </configuration>
+            </plugin>
+
+            <!--
+              jacoco-maven-plugin: measures which lines of code are executed by tests.
+              'prepare-agent' instruments the bytecode before tests run.
+              'report' generates the HTML report at target/site/jacoco/index.html after tests.
+              Run 'mvn test' then open that file in a browser to see coverage by class/method/line.
+            -->
+            <plugin>
+                <groupId>org.jacoco</groupId>
+                <artifactId>jacoco-maven-plugin</artifactId>
+                <version>${jacoco.version}</version>
+                <executions>
+                    <execution>
+                        <goals>
+                            <goal>prepare-agent</goal>
+                        </goals>
+                    </execution>
+                    <execution>
+                        <id>report</id>
+                        <phase>test</phase>
+                        <goals>
+                            <goal>report</goal>
+                        </goals>
+                    </execution>
+                </executions>
+            </plugin>
+
+        </plugins>
+    </build>
+
+</project>

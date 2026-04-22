@@ -1,0 +1,46 @@
+services:
+
+  # ── PostgreSQL with pgvector extension ────────────────────────────────────
+  postgres:
+    # pgvector/pgvector:pg16 is the official image from the pgvector project.
+    # It extends postgres:16 with the vector extension pre-installed.
+    # IMPORTANT: plain postgres:16 does NOT have pgvector — using it will cause
+    # 'ERROR: extension "vector" does not exist' when Flyway runs V5.
+    image: pgvector/pgvector:pg16
+    container_name: support-agent-db
+    environment:
+      POSTGRES_DB: support_agent
+      POSTGRES_USER: support_agent
+      POSTGRES_PASSWORD: support_agent
+    ports:
+      # Exposes PostgreSQL on localhost:5432 so you can connect with IntelliJ
+      # Database tool or DBeaver during development.
+      - "5433:5432"
+    volumes:
+      # Named volume: data persists across 'docker compose down' restarts.
+      # To wipe the DB and start fresh: docker compose down -v
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      # pg_isready checks if the server is ready to accept connections.
+      # Spring Boot will not try to connect until this passes.
+      test: ["CMD-SHELL", "pg_isready -U support_agent -d support_agent"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+
+  # ── Spring Boot Admin Server (Phase 5) ────────────────────────────────────
+  # Uncomment and configure this service in Phase 5 (Production Readiness).
+  # The exact image and basic-auth configuration will be set up then.
+  #
+  # admin-server:
+  #   image: TBD_IN_PHASE_5
+  #   container_name: support-agent-admin
+  #   ports:
+  #     - "8090:8080"
+  #   environment:
+  #     SPRING_SECURITY_USER_NAME: admin
+  #     SPRING_SECURITY_USER_PASSWORD: ${ADMIN_PASSWORD:-changeme}
+
+volumes:
+  postgres_data:
