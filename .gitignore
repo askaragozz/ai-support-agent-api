@@ -37,3 +37,6 @@ logs/
 
 # ── Docker volumes (if ever mounted locally) ───────────────────────────────────
 postgres_data/
+
+# ── Claude Code local settings ─────────────────────────────────────────────────
+.claude/
