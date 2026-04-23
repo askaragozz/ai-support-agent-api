@@ -84,7 +84,7 @@ It is the single source of truth for project context, decisions, and current pro
 | **Phase 3 — AI Integration** | ✅ COMPLETE |
 | **Phase 4 — REST API Layer** | ✅ COMPLETE |
 | **Phase 5 — Production Readiness** | ✅ COMPLETE |
-| **Phase 6 — README** | ⬜ NEXT |
+| **Phase 6 — README** | ✅ COMPLETE |
 
 **Environment status (as of Phase 1):**
 - Java 21 and Maven: being installed via `winget install EclipseAdoptium.Temurin.21.JDK` and `winget install Apache.Maven`
