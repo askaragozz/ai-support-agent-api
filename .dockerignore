@@ -1,0 +1,28 @@
+# Maven build output — the build stage produces its own target/ inside Docker.
+# Including the local target/ would bloat the build context and break reproducibility.
+target/
+
+# Git history is never needed inside a Docker image.
+.git/
+.gitignore
+
+# IDE project files
+.idea/
+*.iml
+.vscode/
+
+# Local secrets — never copy these into an image
+.env
+.env.local
+*.env
+src/main/resources/application-local.yml
+
+# Logs and OS noise
+*.log
+logs/
+.DS_Store
+Thumbs.db
+postgres_data/
+
+# Claude Code local state
+.claude/

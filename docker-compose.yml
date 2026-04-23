@@ -1,11 +1,30 @@
+# ── docker-compose.yml ────────────────────────────────────────────────────────
+#
+# Three services:
+#   postgres     — pgvector-enabled PostgreSQL (required by the app)
+#   admin-server — Spring Boot Admin UI (monitoring dashboard)
+#   app          — the Spring Boot application itself
+#
+# LOCAL DEVELOPMENT WORKFLOW (recommended):
+#   Start only the infrastructure:
+#     docker compose up postgres admin-server
+#   Then run the app outside Docker for fast hot-reload:
+#     mvn spring-boot:run
+#   The app registers with the admin server at http://localhost:8090
+#   using the default APP_BASE_URL=http://host.docker.internal:8080
+#
+# FULL DOCKER STACK (matches production):
+#   docker compose up --build
+#   App is at http://localhost:8080, Admin UI at http://localhost:8090
+#
+# SECRETS:
+#   Create a .env file from .env.example before running.
+#   The .env file is gitignored — never commit it.
+
 services:
 
   # ── PostgreSQL with pgvector extension ────────────────────────────────────
   postgres:
-    # pgvector/pgvector:pg16 is the official image from the pgvector project.
-    # It extends postgres:16 with the vector extension pre-installed.
-    # IMPORTANT: plain postgres:16 does NOT have pgvector — using it will cause
-    # 'ERROR: extension "vector" does not exist' when Flyway runs V5.
     image: pgvector/pgvector:pg16
     container_name: support-agent-db
     environment:
@@ -13,34 +32,80 @@ services:
       POSTGRES_USER: support_agent
       POSTGRES_PASSWORD: support_agent
     ports:
-      # Exposes PostgreSQL on localhost:5432 so you can connect with IntelliJ
-      # Database tool or DBeaver during development.
+      # Host 5433 → container 5432 to avoid collisions with a local Postgres install.
       - "5433:5432"
     volumes:
-      # Named volume: data persists across 'docker compose down' restarts.
-      # To wipe the DB and start fresh: docker compose down -v
+      # Named volume: data survives 'docker compose down'.
+      # To wipe the DB and start clean: docker compose down -v
       - postgres_data:/var/lib/postgresql/data
     healthcheck:
-      # pg_isready checks if the server is ready to accept connections.
-      # Spring Boot will not try to connect until this passes.
       test: ["CMD-SHELL", "pg_isready -U support_agent -d support_agent"]
       interval: 10s
       timeout: 5s
       retries: 5
       start_period: 10s
 
-  # ── Spring Boot Admin Server (Phase 5) ────────────────────────────────────
-  # Uncomment and configure this service in Phase 5 (Production Readiness).
-  # The exact image and basic-auth configuration will be set up then.
+  # ── Spring Boot Admin Server ─────────────────────────────────────────────
   #
-  # admin-server:
-  #   image: TBD_IN_PHASE_5
-  #   container_name: support-agent-admin
-  #   ports:
-  #     - "8090:8080"
-  #   environment:
-  #     SPRING_SECURITY_USER_NAME: admin
-  #     SPRING_SECURITY_USER_PASSWORD: ${ADMIN_PASSWORD:-changeme}
+  # codecentric/spring-boot-admin is the pre-built Admin Server image.
+  # It provides a dashboard at http://localhost:8090 showing health, metrics,
+  # log levels, and HTTP traces for every registered client application.
+  #
+  # Authentication: Spring Security's default in-memory user.
+  #   Username: admin
+  #   Password: value of ADMIN_PASSWORD (from .env, default: changeme)
+  #
+  # Our app registers with this server on startup via the Spring Boot Admin
+  # client dependency (spring-boot-admin-starter-client in pom.xml).
+  admin-server:
+    image: codecentric/spring-boot-admin:3.3.5
+    container_name: support-agent-admin
+    ports:
+      - "8090:8080"
+    environment:
+      # Spring Security's default in-memory user for the Admin UI.
+      SPRING_SECURITY_USER_NAME: admin
+      SPRING_SECURITY_USER_PASSWORD: ${ADMIN_PASSWORD:-changeme}
+
+  # ── Spring Boot Application ───────────────────────────────────────────────
+  #
+  # 'build: .' tells Docker Compose to build from the local Dockerfile.
+  # Run 'docker compose up --build' to rebuild after source changes.
+  #
+  # For local development, skip this service and run the app with Maven instead
+  # (see workflow comment at the top of this file).
+  app:
+    build: .
+    container_name: support-agent-app
+    ports:
+      - "8080:8080"
+    environment:
+      # Database — uses the postgres service name as the hostname.
+      DB_HOST: postgres
+      DB_PORT: 5432
+      DB_NAME: support_agent
+      DB_USER: support_agent
+      DB_PASSWORD: support_agent
+
+      # Spring Boot Admin — uses the admin-server service name as the hostname.
+      ADMIN_HOST: admin-server
+      ADMIN_PASSWORD: ${ADMIN_PASSWORD:-changeme}
+
+      # Tell the admin server how to reach our actuator from inside Docker.
+      # 'app' is the service name in this docker-compose network.
+      APP_BASE_URL: http://app:8080
+
+      # AI — set APP_AI_MOCK_ENABLED=false and provide real keys to enable live AI.
+      APP_AI_MOCK_ENABLED: ${APP_AI_MOCK_ENABLED:-true}
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-PLACEHOLDER}
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-PLACEHOLDER}
+    depends_on:
+      postgres:
+        # Wait for Postgres to pass its healthcheck before starting the app.
+        # Without this, Flyway may fail on startup because the DB isn't ready.
+        condition: service_healthy
+      admin-server:
+        condition: service_started
 
 volumes:
   postgres_data:
