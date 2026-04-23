@@ -1,0 +1,475 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AI Support Agent</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="bg-gray-50 min-h-screen text-slate-800">
+
+    <!-- Header -->
+    <header class="bg-white border-b border-gray-200 px-6 py-5">
+        <div class="max-w-6xl mx-auto">
+            <h1 class="text-xl font-semibold text-slate-900">AI Support Agent</h1>
+            <p class="mt-1 text-sm text-slate-500 leading-relaxed max-w-2xl">
+                Submit a support ticket and watch the async RAG pipeline in action. Your ticket is semantically matched
+                against the knowledge base on the right using pgvector, then Claude generates a grounded response.
+                Edit the knowledge base and resubmit to see how the AI answer changes.
+            </p>
+        </div>
+    </header>
+
+    <!-- Main two-column layout -->
+    <main class="max-w-6xl mx-auto px-6 py-8 grid grid-cols-1 lg:grid-cols-2 gap-8 items-start">
+
+        <!-- ── LEFT: Ticket ────────────────────────────────────────────── -->
+        <section>
+            <h2 class="text-base font-semibold text-slate-700 mb-3">Submit a Ticket</h2>
+
+            <form id="ticketForm" class="bg-white rounded-xl border border-gray-200 p-5 space-y-4">
+                <div>
+                    <label class="block text-xs font-medium text-slate-600 mb-1">Email</label>
+                    <input id="email" type="email" placeholder="you@example.com"
+                        class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+                        required />
+                </div>
+                <div>
+                    <label class="block text-xs font-medium text-slate-600 mb-1">Subject</label>
+                    <input id="subject" type="text" placeholder="e.g. Cannot log in"
+                        class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+                        required />
+                </div>
+                <div>
+                    <label class="block text-xs font-medium text-slate-600 mb-1">Description</label>
+                    <textarea id="description" rows="3"
+                        placeholder="Describe your issue in detail..."
+                        class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent resize-none"
+                        required></textarea>
+                </div>
+                <button type="submit" id="submitBtn"
+                    class="w-full bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed text-white text-sm font-medium rounded-lg px-4 py-2 transition-colors">
+                    Submit Ticket
+                </button>
+            </form>
+
+            <!-- Status steps — hidden until a ticket is submitted -->
+            <div id="statusSection" class="hidden mt-5">
+                <div class="bg-white rounded-xl border border-gray-200 p-5">
+                    <p class="text-xs font-semibold uppercase tracking-wide text-slate-400 mb-4">Processing Status</p>
+                    <div class="space-y-4">
+                        <div class="flex items-center gap-3">
+                            <div id="step1Icon"
+                                class="w-6 h-6 rounded-full border-2 border-gray-300 flex items-center justify-center text-xs font-bold text-gray-400 shrink-0">
+                                1
+                            </div>
+                            <div>
+                                <p id="step1Label" class="text-sm text-slate-400">Ticket Received</p>
+                                <p id="step1Sub" class="text-xs text-slate-300">Saved and queued for processing</p>
+                            </div>
+                        </div>
+                        <div class="flex items-center gap-3">
+                            <div id="step2Icon"
+                                class="w-6 h-6 rounded-full border-2 border-gray-300 flex items-center justify-center text-xs font-bold text-gray-400 shrink-0">
+                                2
+                            </div>
+                            <div>
+                                <p id="step2Label" class="text-sm text-slate-400">AI Processing</p>
+                                <p id="step2Sub" class="text-xs text-slate-300">pgvector search + Claude generation</p>
+                            </div>
+                        </div>
+                        <div class="flex items-center gap-3">
+                            <div id="step3Icon"
+                                class="w-6 h-6 rounded-full border-2 border-gray-300 flex items-center justify-center text-xs font-bold text-gray-400 shrink-0">
+                                3
+                            </div>
+                            <div>
+                                <p id="step3Label" class="text-sm text-slate-400">Response Ready</p>
+                                <p id="step3Sub" class="text-xs text-slate-300">Grounded answer from knowledge base</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- AI Response -->
+                <div id="responseSection" class="hidden mt-4 bg-white rounded-xl border border-gray-200 p-5">
+                    <p class="text-xs font-semibold uppercase tracking-wide text-slate-400 mb-3">AI Response</p>
+                    <p id="responseText" class="text-sm text-slate-700 leading-relaxed whitespace-pre-wrap"></p>
+                </div>
+
+                <!-- Feedback -->
+                <div id="feedbackSection" class="hidden mt-4 bg-white rounded-xl border border-gray-200 p-5">
+                    <p class="text-xs font-semibold uppercase tracking-wide text-slate-400 mb-3">Was this helpful?</p>
+                    <div class="flex gap-2 mb-3">
+                        <button id="thumbsUp" onclick="selectRating('POSITIVE')"
+                            class="flex items-center gap-1.5 border border-gray-300 rounded-lg px-3 py-1.5 text-sm text-slate-600 hover:border-indigo-400 transition-colors">
+                            👍 Yes
+                        </button>
+                        <button id="thumbsDown" onclick="selectRating('NEGATIVE')"
+                            class="flex items-center gap-1.5 border border-gray-300 rounded-lg px-3 py-1.5 text-sm text-slate-600 hover:border-indigo-400 transition-colors">
+                            👎 No
+                        </button>
+                    </div>
+                    <textarea id="feedbackComment" rows="2" placeholder="Optional comment..."
+                        class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent resize-none mb-3"></textarea>
+                    <div class="flex items-center gap-3">
+                        <button onclick="submitFeedback()"
+                            class="bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-medium rounded-lg px-4 py-2 transition-colors">
+                            Submit Feedback
+                        </button>
+                        <p id="feedbackDone" class="hidden text-sm text-green-600">Thank you for your feedback.</p>
+                    </div>
+                </div>
+
+                <!-- Error -->
+                <div id="errorSection" class="hidden mt-4 bg-red-50 rounded-xl border border-red-200 p-5">
+                    <p class="text-xs font-semibold uppercase tracking-wide text-red-400 mb-1">Processing Failed</p>
+                    <p id="errorText" class="text-sm text-red-600"></p>
+                </div>
+            </div>
+        </section>
+
+        <!-- ── RIGHT: Knowledge Base ───────────────────────────────────── -->
+        <section>
+            <div class="flex items-center justify-between mb-3">
+                <h2 class="text-base font-semibold text-slate-700">Knowledge Base</h2>
+                <button onclick="showArticleForm()"
+                    class="bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-medium rounded-lg px-3 py-1.5 transition-colors">
+                    + Add Article
+                </button>
+            </div>
+
+            <!-- Add / Edit form — hidden by default -->
+            <div id="articleForm" class="hidden bg-white rounded-xl border border-gray-200 p-5 mb-4">
+                <p id="articleFormTitle" class="text-xs font-semibold uppercase tracking-wide text-slate-400 mb-3">New Article</p>
+                <input id="articleTitleInput" type="text" placeholder="Title"
+                    class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent mb-3" />
+                <textarea id="articleContentInput" rows="5" placeholder="Article content..."
+                    class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent resize-none mb-3"></textarea>
+                <div class="flex gap-2">
+                    <button onclick="saveArticle()"
+                        class="bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-medium rounded-lg px-4 py-2 transition-colors">
+                        Save
+                    </button>
+                    <button onclick="hideArticleForm()"
+                        class="border border-gray-300 hover:bg-gray-50 text-slate-600 text-sm font-medium rounded-lg px-4 py-2 transition-colors">
+                        Cancel
+                    </button>
+                </div>
+            </div>
+
+            <!-- Article list -->
+            <div id="articleList" class="space-y-2">
+                <p class="text-sm text-slate-400">Loading articles...</p>
+            </div>
+        </section>
+    </main>
+
+    <script>
+        // ── State ──────────────────────────────────────────────────────────────
+        let currentTicketId = null;
+        let pollInterval    = null;
+        let selectedRating  = null;
+        let editingArticleId = null;
+        const articlesCache = {};
+
+        // ── Ticket: Submit ─────────────────────────────────────────────────────
+        document.getElementById('ticketForm').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const btn = document.getElementById('submitBtn');
+            btn.disabled = true;
+            btn.textContent = 'Submitting...';
+
+            try {
+                const res = await fetch('/api/v1/tickets', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        userEmail:   document.getElementById('email').value,
+                        subject:     document.getElementById('subject').value,
+                        description: document.getElementById('description').value,
+                    }),
+                });
+                if (!res.ok) throw new Error();
+                const ticket = await res.json();
+                currentTicketId = ticket.id;
+                resetStatusSection();
+                document.getElementById('statusSection').classList.remove('hidden');
+                setStep(1, 'active');
+                startPolling(ticket.id);
+            } catch {
+                alert('Failed to submit ticket. Is the server running?');
+                btn.disabled = false;
+                btn.textContent = 'Submit Ticket';
+            }
+        });
+
+        // ── Ticket: Polling ────────────────────────────────────────────────────
+        function startPolling(id) {
+            stopPolling();
+            pollInterval = setInterval(() => pollTicket(id), 1500);
+        }
+
+        function stopPolling() {
+            if (pollInterval) { clearInterval(pollInterval); pollInterval = null; }
+        }
+
+        async function pollTicket(id) {
+            try {
+                const res = await fetch(`/api/v1/tickets/${id}`);
+                if (!res.ok) return;
+                const ticket = await res.json();
+
+                if (ticket.status === 'PENDING') {
+                    setStep(1, 'active');
+
+                } else if (ticket.status === 'IN_PROGRESS') {
+                    setStep(1, 'done');
+                    setStep(2, 'active');
+
+                } else if (ticket.status === 'RESOLVED') {
+                    stopPolling();
+                    setStep(1, 'done'); setStep(2, 'done'); setStep(3, 'done');
+                    showResponse(ticket);
+                    showFeedback();
+                    unlockForm();
+
+                } else if (ticket.status === 'FAILED') {
+                    stopPolling();
+                    setStep(1, 'done'); setStep(2, 'error'); setStep(3, 'error');
+                    document.getElementById('errorText').textContent =
+                        ticket.errorMessage || 'An error occurred during AI processing.';
+                    document.getElementById('errorSection').classList.remove('hidden');
+                    unlockForm();
+                }
+            } catch { /* keep polling on transient network errors */ }
+        }
+
+        function unlockForm() {
+            const btn = document.getElementById('submitBtn');
+            btn.disabled = false;
+            btn.textContent = 'Submit Ticket';
+        }
+
+        // ── Ticket: Steps ──────────────────────────────────────────────────────
+        function resetStatusSection() {
+            [1, 2, 3].forEach(n => setStep(n, 'idle'));
+            document.getElementById('responseSection').classList.add('hidden');
+            document.getElementById('feedbackSection').classList.add('hidden');
+            document.getElementById('errorSection').classList.add('hidden');
+        }
+
+        function setStep(n, state) {
+            const icon  = document.getElementById(`step${n}Icon`);
+            const label = document.getElementById(`step${n}Label`);
+
+            // Reset classes
+            icon.className = 'w-6 h-6 rounded-full border-2 flex items-center justify-center text-xs font-bold shrink-0';
+
+            if (state === 'active') {
+                icon.classList.add('border-indigo-500', 'text-indigo-500');
+                label.className = 'text-sm font-medium text-indigo-600';
+                icon.textContent = n;
+            } else if (state === 'done') {
+                icon.classList.add('border-indigo-500', 'bg-indigo-500', 'text-white');
+                label.className = 'text-sm text-slate-700';
+                icon.textContent = '✓';
+            } else if (state === 'error') {
+                icon.classList.add('border-red-400', 'bg-red-400', 'text-white');
+                label.className = 'text-sm text-red-500';
+                icon.textContent = '✕';
+            } else {
+                icon.classList.add('border-gray-300', 'text-gray-400');
+                label.className = 'text-sm text-slate-400';
+                icon.textContent = n;
+            }
+        }
+
+        // ── Ticket: Response ───────────────────────────────────────────────────
+        function showResponse(ticket) {
+            document.getElementById('responseText').textContent =
+                ticket.aiResponse?.responseText ?? 'No response text available.';
+            document.getElementById('responseSection').classList.remove('hidden');
+        }
+
+        // ── Feedback ───────────────────────────────────────────────────────────
+        function showFeedback() {
+            selectedRating = null;
+            document.getElementById('feedbackComment').value = '';
+            document.getElementById('feedbackDone').classList.add('hidden');
+            resetRatingButtons();
+            document.getElementById('feedbackSection').classList.remove('hidden');
+        }
+
+        function resetRatingButtons() {
+            const idle = 'flex items-center gap-1.5 border border-gray-300 rounded-lg px-3 py-1.5 text-sm text-slate-600 hover:border-indigo-400 transition-colors';
+            document.getElementById('thumbsUp').className   = idle;
+            document.getElementById('thumbsDown').className = idle;
+        }
+
+        function selectRating(rating) {
+            selectedRating = rating;
+            resetRatingButtons();
+            const active = 'flex items-center gap-1.5 border-2 border-indigo-500 rounded-lg px-3 py-1.5 text-sm text-indigo-600 font-medium transition-colors';
+            document.getElementById(rating === 'POSITIVE' ? 'thumbsUp' : 'thumbsDown').className = active;
+        }
+
+        async function submitFeedback() {
+            if (!selectedRating)    { alert('Please select thumbs up or thumbs down.'); return; }
+            if (!currentTicketId)   return;
+
+            try {
+                const res = await fetch(`/api/v1/tickets/${currentTicketId}/feedback`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        rating:  selectedRating,
+                        comment: document.getElementById('feedbackComment').value.trim() || null,
+                    }),
+                });
+                if (!res.ok) throw new Error();
+                document.getElementById('feedbackDone').classList.remove('hidden');
+            } catch {
+                alert('Failed to submit feedback.');
+            }
+        }
+
+        // ── Knowledge Base: Load ───────────────────────────────────────────────
+        async function loadArticles() {
+            try {
+                const res = await fetch('/api/v1/knowledge?page=0&size=50');
+                if (!res.ok) throw new Error();
+                const data = await res.json();
+                renderArticles(data.content ?? []);
+            } catch {
+                document.getElementById('articleList').innerHTML =
+                    '<p class="text-sm text-red-400">Failed to load articles.</p>';
+            }
+        }
+
+        function renderArticles(articles) {
+            const list = document.getElementById('articleList');
+
+            if (articles.length === 0) {
+                list.innerHTML = '<p class="text-sm text-slate-400">No articles yet.</p>';
+                return;
+            }
+
+            articles.forEach(a => { articlesCache[a.id] = a; });
+
+            list.innerHTML = articles.map(a => {
+                const preview = a.content.length > 100
+                    ? escHtml(a.content.substring(0, 100)) + '…'
+                    : escHtml(a.content);
+                return `
+                <div class="bg-white rounded-xl border border-gray-200 overflow-hidden">
+                    <button onclick="toggleArticle('${a.id}')"
+                        class="w-full text-left px-5 py-3.5 flex justify-between items-start gap-4 hover:bg-gray-50 transition-colors">
+                        <div class="min-w-0">
+                            <p class="text-sm font-medium text-slate-800">${escHtml(a.title)}</p>
+                            <p class="text-xs text-slate-400 mt-0.5 line-clamp-1">${preview}</p>
+                        </div>
+                        <svg id="chevron-${a.id}"
+                            class="w-4 h-4 text-slate-400 shrink-0 mt-0.5 transition-transform duration-150"
+                            fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/>
+                        </svg>
+                    </button>
+                    <div id="article-${a.id}" class="hidden px-5 pb-4 border-t border-gray-100">
+                        <p class="text-sm text-slate-600 leading-relaxed mt-3 whitespace-pre-wrap">${escHtml(a.content)}</p>
+                        <div class="flex gap-2 mt-4">
+                            <button onclick="editArticle('${a.id}')"
+                                class="text-xs border border-gray-300 hover:border-indigo-400 text-slate-600 rounded-lg px-3 py-1.5 transition-colors">
+                                Edit
+                            </button>
+                            <button onclick="deleteArticle('${a.id}')"
+                                class="text-xs border border-red-200 hover:border-red-400 text-red-500 rounded-lg px-3 py-1.5 transition-colors">
+                                Delete
+                            </button>
+                        </div>
+                    </div>
+                </div>`;
+            }).join('');
+        }
+
+        function toggleArticle(id) {
+            const body    = document.getElementById(`article-${id}`);
+            const chevron = document.getElementById(`chevron-${id}`);
+            const isHidden = body.classList.toggle('hidden');
+            chevron.style.transform = isHidden ? '' : 'rotate(180deg)';
+        }
+
+        // ── Knowledge Base: CRUD ───────────────────────────────────────────────
+        function showArticleForm() {
+            editingArticleId = null;
+            document.getElementById('articleFormTitle').textContent = 'New Article';
+            document.getElementById('articleTitleInput').value   = '';
+            document.getElementById('articleContentInput').value = '';
+            document.getElementById('articleForm').classList.remove('hidden');
+            document.getElementById('articleTitleInput').focus();
+        }
+
+        function editArticle(id) {
+            const a = articlesCache[id];
+            if (!a) return;
+            editingArticleId = id;
+            document.getElementById('articleFormTitle').textContent = 'Edit Article';
+            document.getElementById('articleTitleInput').value   = a.title;
+            document.getElementById('articleContentInput').value = a.content;
+            document.getElementById('articleForm').classList.remove('hidden');
+            document.getElementById('articleForm').scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+            document.getElementById('articleTitleInput').focus();
+        }
+
+        function hideArticleForm() {
+            document.getElementById('articleForm').classList.add('hidden');
+            editingArticleId = null;
+        }
+
+        async function saveArticle() {
+            const title   = document.getElementById('articleTitleInput').value.trim();
+            const content = document.getElementById('articleContentInput').value.trim();
+            if (!title || !content) { alert('Title and content are required.'); return; }
+
+            const url    = editingArticleId ? `/api/v1/knowledge/${editingArticleId}` : '/api/v1/knowledge';
+            const method = editingArticleId ? 'PUT' : 'POST';
+
+            try {
+                const res = await fetch(url, {
+                    method,
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ title, content }),
+                });
+                if (!res.ok) throw new Error();
+                hideArticleForm();
+                loadArticles();
+            } catch {
+                alert('Failed to save article.');
+            }
+        }
+
+        async function deleteArticle(id) {
+            if (!confirm('Delete this article?')) return;
+            try {
+                const res = await fetch(`/api/v1/knowledge/${id}`, { method: 'DELETE' });
+                if (!res.ok) throw new Error();
+                loadArticles();
+            } catch {
+                alert('Failed to delete article.');
+            }
+        }
+
+        // ── Utils ──────────────────────────────────────────────────────────────
+        function escHtml(str) {
+            return String(str)
+                .replace(/&/g, '&amp;')
+                .replace(/</g, '&lt;')
+                .replace(/>/g, '&gt;')
+                .replace(/"/g, '&quot;');
+        }
+
+        // ── Init ───────────────────────────────────────────────────────────────
+        loadArticles();
+    </script>
+</body>
+</html>
