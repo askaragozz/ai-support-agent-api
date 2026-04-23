@@ -11,6 +11,13 @@ spring:
     password: ${DB_PASSWORD:support_agent}
     driver-class-name: org.postgresql.Driver
 
+  mvc:
+    # Enables RFC 7807 ProblemDetail format for all standard Spring MVC exceptions.
+    # ResponseStatusException, MethodArgumentNotValidException, NoResourceFoundException, etc.
+    # all return a structured { "status", "title", "detail", "instance" } JSON body.
+    problemdetails:
+      enabled: true
+
   jpa:
     hibernate:
       # 'validate': Hibernate reads DB metadata at startup and throws an exception if the

@@ -125,6 +125,8 @@ public class ClaudeRagService implements RagService {
             aiResponseRepository.save(response);
 
             // ── Step 6: Mark RESOLVED ─────────────────────────────────────────────
+            // Must link aiResponse before saving — same orphanRemoval reason as MockRagService.
+            ticket.setAiResponse(response);
             ticket.setStatus(TicketStatus.RESOLVED);
             ticketRepository.save(ticket);
 

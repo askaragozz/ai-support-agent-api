@@ -48,6 +48,15 @@ public class KnowledgeArticle {
      */
     @Convert(converter = FloatArrayToVectorConverter.class)
     @Column(columnDefinition = "vector(1536)")
+    /*
+     * @ColumnTransformer(write = "?::vector"):
+     * Without this, Hibernate binds the parameter as 'character varying' (the converter's
+     * output type). PostgreSQL rejects null::varchar for a vector column with:
+     *   "column is of type vector but expression is of type character varying"
+     * The cast ?::vector wraps every INSERT/UPDATE parameter so PostgreSQL receives the
+     * value as the correct type — including NULL, which becomes NULL::vector.
+     */
+    @org.hibernate.annotations.ColumnTransformer(write = "?::vector")
     private float[] embedding;
 
     @CreationTimestamp

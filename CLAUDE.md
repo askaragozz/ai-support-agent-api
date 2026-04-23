@@ -81,9 +81,9 @@ It is the single source of truth for project context, decisions, and current pro
 |---|---|
 | **Phase 1 — Project Setup** | ✅ COMPLETE |
 | **Phase 2 — Data Layer** | ✅ COMPLETE |
-| **Phase 3 — AI Integration** | ⬜ NEXT |
-| Phase 4 — REST API Layer | ⬜ Pending |
-| Phase 5 — Production Readiness | ⬜ Pending |
+| **Phase 3 — AI Integration** | ✅ COMPLETE |
+| **Phase 4 — REST API Layer** | ✅ COMPLETE |
+| **Phase 5 — Production Readiness** | ⬜ NEXT |
 | Phase 6 — README | ⬜ Pending |
 
 **Environment status (as of Phase 1):**

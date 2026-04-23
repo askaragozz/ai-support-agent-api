@@ -76,6 +76,12 @@ public class MockRagService implements RagService {
             aiResponseRepository.save(response);
 
             // ── Step 4: Mark RESOLVED ─────────────────────────────────────────────
+            // IMPORTANT: set aiResponse on the ticket before saving.
+            // SupportTicket.aiResponse has orphanRemoval = true. If we call save()
+            // with aiResponse = null on a detached entity, Hibernate merges the state
+            // and interprets the null as "this child was removed" — deleting the row
+            // we just inserted in step 3.
+            ticket.setAiResponse(response);
             ticket.setStatus(TicketStatus.RESOLVED);
             ticketRepository.save(ticket);
 
