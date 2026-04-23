@@ -7,8 +7,6 @@ It is the single source of truth for project context, decisions, and current pro
 
 ## Who the User Is
 
-- Learning Java from scratch — no prior Java experience, but has general programming background
-- Goal: break into AI Java Developer roles; this project is a portfolio piece for GitHub and job interviews
 - Treat every concept (annotation, pattern, Spring idiom) as new — add a short comment block explaining WHAT it does and WHY it is used here
 - Pretend a senior engineer reviews every PR: naming, structure, and code quality must be professional
 - One phase at a time: finish a phase fully, then pause and check for questions before proceeding
