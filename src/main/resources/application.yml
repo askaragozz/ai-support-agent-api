@@ -11,6 +11,13 @@ spring:
     password: ${DB_PASSWORD:support_agent}
     driver-class-name: org.postgresql.Driver
 
+  mvc:
+    # Enables RFC 7807 ProblemDetail format for all standard Spring MVC exceptions.
+    # ResponseStatusException, MethodArgumentNotValidException, NoResourceFoundException, etc.
+    # all return a structured { "status", "title", "detail", "instance" } JSON body.
+    problemdetails:
+      enabled: true
+
   jpa:
     hibernate:
       # 'validate': Hibernate reads DB metadata at startup and throws an exception if the
@@ -66,16 +73,27 @@ spring:
           model: text-embedding-3-small
 
   # ── Spring Boot Admin Client ───────────────────────────────────────────────
-  # Enabled in Phase 5 when the admin server Docker service is configured.
-  # The client registers this app with the admin server on startup so it appears
-  # in the monitoring dashboard at http://localhost:8090.
+  # On startup, this client POSTs the app's name and actuator URL to the admin
+  # server. The server then polls our /actuator/* endpoints to populate the
+  # monitoring dashboard at http://localhost:8090.
   boot:
     admin:
       client:
-        enabled: false  # Set to true in Phase 5
+        enabled: true
+        # Admin server address. Override with ADMIN_HOST env var in production.
         url: http://${ADMIN_HOST:localhost}:8090
+        # Credentials for the admin server's basic-auth endpoint.
+        username: admin
+        password: ${ADMIN_PASSWORD:-changeme}
         instance:
           name: ${spring.application.name}
+          # The URL the admin SERVER uses to call back to OUR actuator.
+          # Must be reachable FROM the admin server container, not from a browser.
+          #   Local dev (admin in Docker):    http://host.docker.internal:8080
+          #   Full Docker Compose stack:      http://app:8080
+          #   Railway deployment:             https://your-app.railway.app
+          # Set APP_BASE_URL in .env or environment to override the default.
+          service-base-url: ${APP_BASE_URL:http://host.docker.internal:8080}
 
 # ── Actuator endpoints ──────────────────────────────────────────────────────
 management:
@@ -125,8 +143,8 @@ app:
     # Controls which RagService implementation is active at runtime.
     # true  → MockRagService bean is injected (no API keys needed)
     # false → ClaudeRagService bean is injected (requires ANTHROPIC_API_KEY + OPENAI_API_KEY)
-    # Override this to 'false' in application-local.yml when real keys are available.
-    mock-enabled: true
+    # Override via APP_AI_MOCK_ENABLED env var or application-local.yml.
+    mock-enabled: ${APP_AI_MOCK_ENABLED:true}
   rag:
     # Number of knowledge base articles to retrieve per similarity search.
     # Higher values give Claude more context but increase prompt size and cost.

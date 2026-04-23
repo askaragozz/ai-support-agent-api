@@ -34,6 +34,13 @@
         <springdoc.version>2.7.0</springdoc.version>
         <pgvector.version>0.1.6</pgvector.version>
         <jacoco.version>0.8.12</jacoco.version>
+        <!--
+          docker.host is passed to the Surefire test JVM as the DOCKER_HOST environment variable
+          so Testcontainers can find Docker Desktop on Windows (which uses TCP when
+          "Expose daemon on tcp://localhost:2375 without TLS" is enabled in Docker Desktop settings).
+          On Mac/Linux override this with: mvn test -Ddocker.host=unix:///var/run/docker.sock
+        -->
+        <docker.host>tcp://localhost:2375</docker.host>
     </properties>
 
     <!--
@@ -347,6 +354,43 @@
                         -->
                         <arg>-Amapstruct.defaultComponentModel=spring</arg>
                     </compilerArgs>
+                </configuration>
+            </plugin>
+
+            <!--
+              maven-surefire-plugin: runs unit and integration tests.
+              The environmentVariables block passes DOCKER_HOST to the forked test JVM.
+              Without this, Testcontainers on Windows cannot find Docker Desktop because
+              the docker-java library doesn't read Docker CLI contexts — it only looks at
+              the DOCKER_HOST environment variable or well-known socket paths.
+            -->
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-surefire-plugin</artifactId>
+                <configuration>
+                    <environmentVariables>
+                        <!--
+                          Windows Docker Desktop fix for Testcontainers:
+                          - DOCKER_HOST: use TCP so docker-java bypasses Windows named pipes
+                          - DOCKER_CONTEXT: set to "default" to stop docker-java from reading
+                            ~/.docker/config.json (which has "currentContext":"desktop-linux")
+                            and overriding DOCKER_HOST with the named pipe endpoint
+                        -->
+                        <DOCKER_HOST>${docker.host}</DOCKER_HOST>
+                        <DOCKER_CONTEXT>default</DOCKER_CONTEXT>
+                    </environmentVariables>
+                    <!--
+                      docker-java reads the API version via System.getProperty("api.version"),
+                      NOT from an environment variable — so this must be a system property.
+                      Docker Desktop 29.x enforces MinAPIVersion=1.44; docker-java defaults to
+                      probing with v1.19 which gets rejected with HTTP 400 "client version 1.19
+                      is too old". Setting api.version=1.44 here makes every request use
+                      /v1.44/... and prevents the rejection that causes "Could not find a valid
+                      Docker environment".
+                    -->
+                    <systemPropertyVariables>
+                        <api.version>1.44</api.version>
+                    </systemPropertyVariables>
                 </configuration>
             </plugin>
 

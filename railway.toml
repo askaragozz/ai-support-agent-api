@@ -1,0 +1,36 @@
+# ── railway.toml ──────────────────────────────────────────────────────────────
+#
+# Railway deployment configuration.
+# Railway reads this file when you connect your GitHub repository.
+#
+# DEPLOYMENT STEPS:
+#   1. Push this repository to GitHub (public).
+#   2. Create a new Railway project at https://railway.app
+#   3. Add a PostgreSQL service from the Railway dashboard.
+#      Copy the connection variables (PGHOST, PGPORT, PGDATABASE, PGUSER, PGPASSWORD)
+#      into your service's environment as DB_HOST, DB_PORT, DB_NAME, DB_USER, DB_PASSWORD.
+#   4. (Optional) Deploy a second service using the
+#      codecentric/spring-boot-admin:3.3.5 image as the admin server.
+#      Set ADMIN_HOST to its internal Railway hostname.
+#   5. Set the required environment variables listed in .env.example.
+#   6. Deploy — Railway builds the Dockerfile and starts the app.
+
+[build]
+# Use the Dockerfile in the repository root.
+builder = "DOCKERFILE"
+dockerfilePath = "Dockerfile"
+
+[deploy]
+# Railway polls this endpoint to decide whether the deployment is healthy.
+# Spring Boot's /actuator/health returns 200 when all health indicators pass
+# (database connectivity, disk space, etc.).
+healthcheckPath = "/actuator/health"
+
+# How long Railway waits for the healthcheck to pass before marking the
+# deployment as failed. 300 s gives Flyway time to run all migrations on
+# a cold-start database.
+healthcheckTimeout = 300
+
+# Restart the container automatically on non-zero exit codes.
+restartPolicyType = "ON_FAILURE"
+restartPolicyMaxRetries = 3
